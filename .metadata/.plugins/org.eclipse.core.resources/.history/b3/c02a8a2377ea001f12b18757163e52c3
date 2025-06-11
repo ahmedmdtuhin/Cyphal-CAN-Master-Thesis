@@ -1,0 +1,543 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2022 STMicroelectronics.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by ST under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include <stdlib.h>
+#include "libcanard/canard.h"
+#include "uavcan/node/Heartbeat_1_0.h"
+#include "uavcan/primitive/array/Real64_1_0.h"
+#include "uavcan/register/List_1_0.h"
+#include "uavcan/register/Name_1_0.h"
+
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+CAN_HandleTypeDef hcan1;
+
+/* USER CODE BEGIN PV */
+CanardInstance 	canard;		// This is the core structure that keeps all of the states and allocated resources of the library instance
+CanardTxQueue 	queue;		// Prioritized transmission queue that keeps CAN frames destined for transmission via one CAN interface
+
+static uint8_t my_message_transfer_id = 0;
+CanardPortID const MSG_PORT_ID   = 1620U;
+uint32_t test_uptimeSec = 0;
+
+static const char* const g_register_names[] = {
+    "my_register_foo",
+    "my_register_bar",
+    "my_register_baz",
+    // ... add as many as you like ...
+};
+
+static const size_t g_num_registers = sizeof(g_register_names)/sizeof(g_register_names[0]);
+
+
+// buffer for serialization of a heartbeat message
+size_t hbeat_ser_buf_size = uavcan_node_Heartbeat_1_0_EXTENT_BYTES_;
+uint8_t hbeat_ser_buf[uavcan_node_Heartbeat_1_0_EXTENT_BYTES_];
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_CAN1_Init(void);
+/* USER CODE BEGIN PFP */
+
+// Wrappers for using o1heap allocator with libcanard
+static void* memAllocate(CanardInstance* const ins, const size_t amount);
+static void memFree(CanardInstance* const ins, void* const pointer);
+
+// Application-specific function prototypes
+void process_canard_TX_queue(void);
+
+// return useconds - not implemented yet
+uint32_t micros(void)
+{
+  return 0;
+}
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_CAN1_Init();
+  /* USER CODE BEGIN 2 */
+  HAL_CAN_Start(&hcan1);
+  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+  CAN_FilterTypeDef Filter;
+
+  // accept all frames - filtration is managed by software
+  Filter.FilterIdHigh = 0x0000;
+  Filter.FilterIdLow = 0x0000;
+  Filter.FilterMaskIdHigh = 0x0000;
+  Filter.FilterMaskIdLow = 0x0000;
+  Filter.FilterFIFOAssignment = CAN_RX_FIFO0;
+  Filter.FilterBank = 0;
+  Filter.FilterMode = CAN_FILTERMODE_IDMASK;
+  Filter.FilterScale = CAN_FILTERSCALE_32BIT;
+  Filter.FilterActivation = ENABLE;
+  Filter.SlaveStartFilterBank = 0;
+
+  HAL_CAN_ConfigFilter(&hcan1, &Filter);
+
+
+  // Initialization of a canard instance with the previous allocator
+  canard = canardInit(&memAllocate, &memFree);
+  initCyphal();
+  canard.node_id = 96;
+
+  queue = canardTxInit(	100,                 		// Limit the size of the queue at 100 frames.
+                        CANARD_MTU_CAN_CLASSIC);
+
+  CanardRxSubscription subscription; // Transfer subscription state.
+
+  if( canardRxSubscribe((CanardInstance *const)&canard,
+                        CanardTransferKindMessage,
+                        MSG_PORT_ID,
+                        uavcan_primitive_array_Real64_1_0_EXTENT_BYTES_,
+                        CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                        &subscription) != 1 )
+                        {
+                          Error_Handler();
+                        }
+
+  static CanardRxSubscription g_reg_list_service_subscription;
+
+
+
+      // Now your node will be able to accept requests for the register List service.
+  }
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    // Create a heartbeat message
+    uavcan_node_Heartbeat_1_0 test_heartbeat = {.uptime = test_uptimeSec,
+                                                .health = {uavcan_node_Health_1_0_NOMINAL},
+                                                .mode = {uavcan_node_Mode_1_0_OPERATIONAL}};
+
+    // Serialize the heartbeat message
+    if (uavcan_node_Heartbeat_1_0_serialize_(&test_heartbeat, hbeat_ser_buf, &hbeat_ser_buf_size) < 0)
+    {
+      Error_Handler();
+    }
+
+    // Create a transfer for the heartbeat message
+    const CanardTransferMetadata transfer_metadata = {.priority = CanardPriorityNominal,
+                                                      .transfer_kind = CanardTransferKindMessage,
+                                                      .port_id = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
+                                                      .remote_node_id = CANARD_NODE_ID_UNSET,
+                                                      .transfer_id = my_message_transfer_id,};
+
+    if(canardTxPush(&queue,               	// Call this once per redundant CAN interface (queue)
+                    &canard,
+                    0,     					// Zero if transmission deadline is not limited.
+                    &transfer_metadata,
+                    hbeat_ser_buf_size,		// Size of the message payload (see Nunavut transpiler)
+                    hbeat_ser_buf) < 0 )
+                    {
+                      Error_Handler();
+                    }
+
+    // Block for a second before generating the next transfer
+    uint32_t timestamp = HAL_GetTick();
+    while( HAL_GetTick() < timestamp + 1000u )
+    {
+      process_canard_TX_queue();
+      HAL_Delay(10);
+    }
+
+    // Increase uptime
+    test_uptimeSec++;
+    // Increment the transfer_id variable
+    my_message_transfer_id++;
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 160;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief CAN1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CAN1_Init(void)
+{
+
+  /* USER CODE BEGIN CAN1_Init 0 */
+
+  /* USER CODE END CAN1_Init 0 */
+
+  /* USER CODE BEGIN CAN1_Init 1 */
+
+  /* USER CODE END CAN1_Init 1 */
+  hcan1.Instance = CAN1;
+  hcan1.Init.Prescaler = 4;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_8TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.TimeTriggeredMode = DISABLE;
+  hcan1.Init.AutoBusOff = DISABLE;
+  hcan1.Init.AutoWakeUp = DISABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
+  hcan1.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CAN1_Init 2 */
+
+  /* USER CODE END CAN1_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+}
+
+/* USER CODE BEGIN 4 */
+void process_canard_TX_queue(void)
+{
+  // Look at top of the TX queue of individual CAN frames
+  for (const CanardTxQueueItem* ti = NULL; (ti = canardTxPeek(&queue)) != NULL;)
+  {
+    if ((0U == ti->tx_deadline_usec) || (ti->tx_deadline_usec > micros()))  // Check the deadline.
+    {
+      /* Instantiate a frame for the media layer */
+      CAN_TxHeaderTypeDef TxHeader;
+      TxHeader.IDE = CAN_ID_EXT;
+      TxHeader.RTR = CAN_RTR_DATA;
+
+      TxHeader.DLC = ti->frame.payload_size;
+      TxHeader.ExtId = ti->frame.extended_can_id;
+
+      uint8_t TxData[8];
+      uint32_t TxMailbox;
+
+      memcpy( TxData, (uint8_t *)ti->frame.payload, ti->frame.payload_size );
+
+      if ( HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+      {
+        break;
+      }
+    }
+    // After the frame is transmitted or if it has timed out while waiting, pop it from the queue and deallocate:
+    canard.memory_free(&canard, canardTxPop(&queue, ti));
+  }
+}
+
+#pragma optimize=s none
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+    // 1. Read the pending frame from FIFO0.
+    CAN_RxHeaderTypeDef RxHeader;
+    uint8_t RxData[8] = {0};
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
+    {
+        // Error reading CAN message; handle as needed.
+        return;
+    }
+
+    // 2. Wrap it into a CanardFrame.
+    CanardFrame rxf;
+    rxf.extended_can_id = RxHeader.ExtId;          // 29-bit ID from hardware
+    rxf.payload_size    = RxHeader.DLC;            // 0..8
+    rxf.payload         = RxData;                  // Our local buffer
+
+    // 3. Attempt to parse it into a higher-level CanardRxTransfer.
+    CanardRxTransfer transfer;
+    const int8_t accept_result = canardRxAccept(
+        &canard,
+        micros(),        // Local monotonic microsecond timestamp
+        &rxf,
+        0,               // If you have multiple redundant interfaces, put the iface index here
+        &transfer,
+        NULL
+    );
+
+    if (accept_result != 1)
+    {
+        // Not a valid Cyphal transfer (or it’s a multi-frame transfer still incomplete).
+        return;
+    }
+
+    // -------------------------------------------------------
+    // If you also have other messages to parse, check them here:
+    // e.g., if (transfer.metadata.transfer_kind == CanardTransferKindMessage && transfer.metadata.port_id == YOUR_PORT_ID) { ... }
+    // -------------------------------------------------------
+
+    // 4. Check if this is a uavcan.register.List.1.0 REQUEST:
+    if ((transfer.metadata.transfer_kind == CanardTransferKindRequest) &&
+        (transfer.metadata.port_id == uavcan_register_List_1_0_FIXED_PORT_ID_)) // 385
+    {
+        // Deserialize the request to get the index.
+        uavcan_register_List_Request_1_0 request;
+        size_t request_payload_size = transfer.payload_size;
+        const int8_t deserialization_result =
+            uavcan_register_List_Request_1_0_deserialize_(
+                &request,
+                (const uint8_t*)transfer.payload,
+                &request_payload_size
+            );
+
+        // We always free the payload after deserialization.
+        canard.memory_free(&canard, transfer.payload);
+
+        if (deserialization_result >= 0)
+        {
+            // 5. Build the response with the name that corresponds to 'request.index'.
+            uavcan_register_List_Response_1_0 response;
+            uavcan_register_List_Response_1_0_initialize_(&response);
+
+            const uint16_t idx = request.index;
+            if (idx < g_num_registers)
+            {
+                // Valid index => set the register name
+                const char* reg_name = g_register_names[idx];
+                size_t name_len = strlen(reg_name);
+                if (name_len > 255U) name_len = 255U;  // saturate
+                memcpy(response.name.name.elements, reg_name, name_len);
+                response.name.name.count = name_len;
+            }
+            else
+            {
+                // Out-of-range => return an empty name
+                response.name.name.count = 0U;
+            }
+
+            // 6. Serialize the response
+            uint8_t resp_payload[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+            size_t resp_payload_size = sizeof(resp_payload);
+            const int8_t ser_res =
+                uavcan_register_List_Response_1_0_serialize_(&response, resp_payload, &resp_payload_size);
+            if (ser_res < 0)
+            {
+                // Serialization error; nothing we can do here.
+                return;
+            }
+
+            // 7. Publish the service response
+            CanardTransferMetadata meta = {
+                .priority       = transfer.metadata.priority,
+                .transfer_kind  = CanardTransferKindResponse,     // must be RESPONSE
+                .port_id        = uavcan_register_List_1_0_FIXED_PORT_ID_, // 385
+                .remote_node_id = transfer.metadata.remote_node_id,// who requested
+                .transfer_id    = transfer.metadata.transfer_id,   // must match request
+            };
+
+            const int32_t push_result = canardTxPush(
+                &queue,
+                &canard,
+                micros() + 1000ULL * 1000ULL,  // e.g. 1-second deadline
+                &meta,
+                resp_payload_size,
+                resp_payload
+            );
+            (void) push_result;  // Handle error if < 0
+        }
+
+        // Done with handling the List.1.0 request
+        return;
+    }
+    else
+    {
+        // If this was not a List.1.0 request, handle your other messages or just free the payload.
+        // For example, if you had something else waiting to be deserialized. Or:
+
+        canard.memory_free(&canard, transfer.payload);
+        return;
+    }
+}
+
+
+#pragma optimize=s none
+void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+  return ;
+}
+
+static void* memAllocate(CanardInstance* const ins, const size_t amount)
+{
+  (void) ins;
+  return malloc(amount);
+}
+
+static void memFree(CanardInstance* const ins, void* const pointer)
+{
+  (void) ins;
+  free( pointer );
+}
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

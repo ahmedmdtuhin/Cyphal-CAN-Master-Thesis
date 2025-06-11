@@ -1,0 +1,12 @@
+23:27:58 **** Incremental Build of configuration Debug for project STM32_HAL_libcanard_new2with getinfo2 ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/canard.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F446xx -c -I../Core/Inc -I"D:/from lab/stmWithCmake/STM32_HAL_libcanard_new2with getinfo2/include/libcanard" -I"-u _printf_float" -I../Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -I"D:/from lab/stmWithCmake/STM32_HAL_libcanard_new2with getinfo2/include" -I"D:/from lab/stmWithCmake/STM32_HAL_libcanard_new2with getinfo2/Drivers/Oled_display_driver" -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/canard.d" -MT"Core/Src/canard.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/canard.o"
+../Core/Src/canard.c:43:10: fatal error: _canard_cavl.h: No such file or directory
+   43 | #include "_canard_cavl.h"
+      |          ^~~~~~~~~~~~~~~~
+compilation terminated.
+make: *** [Core/Src/subdir.mk:37: Core/Src/canard.o] Error 1
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+
+23:27:59 Build Failed. 2 errors, 0 warnings. (took 543ms)
+

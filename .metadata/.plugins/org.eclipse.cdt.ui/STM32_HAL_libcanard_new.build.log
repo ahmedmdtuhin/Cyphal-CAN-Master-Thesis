@@ -1,0 +1,10 @@
+05:30:19 **** Incremental Build of configuration Debug for project STM32_HAL_libcanard_new ****
+make -j8 all 
+arm-none-eabi-size  STM32_HAL_libcanard_new.elf 
+   text	   data	    bss	    dec	    hex	filename
+  54552	    488	  25728	  80768	  13b80	STM32_HAL_libcanard_new.elf
+Finished building: default.size.stdout
+ 
+
+05:30:19 Build Finished. 0 errors, 0 warnings. (took 270ms)
+

@@ -1,0 +1,10 @@
+03:30:59 **** Incremental Build of configuration Debug for project Cyphal_CAN_implementation_with_IRQ_list ****
+make -j8 all 
+arm-none-eabi-size  Cyphal_CAN_implementation_with_IRQ_list.elf 
+   text	   data	    bss	    dec	    hex	filename
+  47292	    472	   2568	  50332	   c49c	Cyphal_CAN_implementation_with_IRQ_list.elf
+Finished building: default.size.stdout
+ 
+
+03:30:59 Build Finished. 0 errors, 0 warnings. (took 248ms)
+

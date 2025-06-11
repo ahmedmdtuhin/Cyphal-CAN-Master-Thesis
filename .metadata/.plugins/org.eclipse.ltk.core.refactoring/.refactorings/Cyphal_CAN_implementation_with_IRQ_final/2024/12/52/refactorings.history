@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;Cyphal_CAN_implementation_with_IRQ/Cyphal_CAN_implementation_with_IRQ2.ioc&apos; to &apos;Cyphal_CAN_implementation_with_IRQ.ioc&apos;" description="Rename resource &apos;Cyphal_CAN_implementation_with_IRQ2.ioc&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Cyphal_CAN_implementation_with_IRQ2.ioc" name="Cyphal_CAN_implementation_with_IRQ.ioc" stamp="1734926580946" updateReferences="true"/>
+</session>

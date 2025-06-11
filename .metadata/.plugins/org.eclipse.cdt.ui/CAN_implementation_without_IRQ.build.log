@@ -1,0 +1,10 @@
+16:18:36 **** Incremental Build of configuration Debug for project CAN_implementation_without_IRQ ****
+make -j8 all 
+arm-none-eabi-size  CAN_implementation_without_IRQ.elf 
+   text	   data	    bss	    dec	    hex	filename
+  34636	    476	   2620	  37732	   9364	CAN_implementation_without_IRQ.elf
+Finished building: default.size.stdout
+ 
+
+16:18:36 Build Finished. 0 errors, 0 warnings. (took 348ms)
+
