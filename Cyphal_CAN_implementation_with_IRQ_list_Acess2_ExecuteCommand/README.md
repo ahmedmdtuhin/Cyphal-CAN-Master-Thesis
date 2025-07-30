@@ -200,7 +200,7 @@ To reset the register values to factory defaults:
 
 * 🔁 Software: Implement a factory_reset command handler that:
 
-  * Erases Sector 7
+  * Erases Sector 7 and sets all the registers to 0.
 
   * Resets the MCU (via NVIC_SystemReset())
 
@@ -218,7 +218,7 @@ Md Tuhin Ahmed | [ahmedmd.tuhin@yahoo.com](ahmedmd.tuhin@yahoo.com)
 
 ## Version History
 
-* Version 0.01
+* Version 1.0
 * I really hope it works.
 
 ## License
