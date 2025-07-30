@@ -1,9 +1,12 @@
 # Cyphal/CAN Node on STM32
 
-This project is an implementation of a Cyphal/CAN node on an STM32 microcontroller. The firmware is designed to demonstrate core Cyphal features, including node heartbeating, remote register access, and command execution.
+This project is an implementation of a Cyphal/CAN node on an STM32 microcontroller. The firmware is designed to demonstrate core Cyphal features, including node heartbeating, remote register access, and command execution. 
 
 The node is configured with a default ID of 96. It defines several registers, such as "my_register_2nd," which can be read and written remotely.
+### 🎥 Demo Video
 
+Watch the project demo on YouTube:  
+👉 [Cyphal Persistent Register + Restart Demo](https://youtu.be/ke4iJYPAObM)
 ***
 
 ## Hardware Requirements
@@ -129,7 +132,7 @@ y cmd 96 restart
 ```
 
 
-Factory reset (all register value=0):
+Factory reset (all register values):
 
 ```bash
 y cmd 96 factory_reset
