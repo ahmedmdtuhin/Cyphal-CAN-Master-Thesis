@@ -1,0 +1,17 @@
+/*
+ * flash_storage.h
+ *
+ *  Created on: Jul 30, 2025
+ *      Author: ahmed
+ */
+
+#ifndef FLASH_STORAGE_H
+#define FLASH_STORAGE_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+void save_registers_to_flash(uint16_t *values, size_t count);
+void load_registers_from_flash(uint16_t *values, size_t count);
+
+#endif // FLASH_STORAGE_H

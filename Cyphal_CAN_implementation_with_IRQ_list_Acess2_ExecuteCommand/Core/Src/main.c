@@ -38,6 +38,7 @@
 #include "uavcan/register/Name_1_0.h"
 #include "uavcan/register/Access_1_0.h"
 #include <uavcan/node/ExecuteCommand_1_3.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -81,7 +82,50 @@ static uint16_t g_register_values[] = {500, 6, 7, 8};
 // Number of registers
 static const size_t g_num_registers = sizeof(g_register_names) / sizeof(g_register_names[0]);
 
+// For Persistence storage
+#define FLASH_SECTOR_TO_ERASE FLASH_SECTOR_7
+#define FLASH_BASE_ADDR       0x08060000U
+volatile bool restart_pending = false;
 
+
+
+void save_registers_to_flash(void) {
+    HAL_FLASH_Unlock();
+
+    FLASH_EraseInitTypeDef erase;
+    uint32_t SectorError;
+
+    erase.TypeErase = FLASH_TYPEERASE_SECTORS;
+    erase.Sector = FLASH_SECTOR_TO_ERASE;
+    erase.NbSectors = 1;
+    erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+
+    if (HAL_FLASHEx_Erase(&erase, &SectorError) != HAL_OK) {
+        HAL_FLASH_Lock();
+        return;
+    }
+
+    uint32_t address = FLASH_BASE_ADDR;
+    for (size_t i = 0; i < g_num_registers; i++) {
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, address, g_register_values[i]);
+        address += 2;
+    }
+
+    HAL_FLASH_Lock();
+}
+
+void load_registers_from_flash(void) {
+    const uint16_t* flash_data = (uint16_t*)FLASH_BASE_ADDR;
+
+    // Only load if data is not all 0xFFFF
+    for (size_t i = 0; i < g_num_registers; i++) {
+        if (flash_data[i] == 0xFFFF) return;  // flash uninitialized
+    }
+
+    for (size_t i = 0; i < g_num_registers; i++) {
+        g_register_values[i] = flash_data[i];
+    }
+}
 static CanardRxSubscription g_reg_access_service_subscription;
 
 
@@ -168,6 +212,7 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN1_Init();
   /* USER CODE BEGIN 2 */
+  load_registers_from_flash();
   HAL_CAN_Start(&hcan1);
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
@@ -256,6 +301,12 @@ int main(void)
     my_message_transfer_id++;
 
     /* USER CODE END WHILE */
+    if (restart_pending)
+    {
+    	save_registers_to_flash();
+        HAL_Delay(100);  // Let Yakut receive the response before reset
+        NVIC_SystemReset();
+    }
 
     /* USER CODE BEGIN 3 */
   }
@@ -540,28 +591,62 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             uavcan_node_ExecuteCommand_Response_1_3 response;
             uavcan_node_ExecuteCommand_Response_1_3_initialize_(&response);
 
+//            switch (request.command)
+//            {
+//                case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_RESTART:
+//                    response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
+//                    strcpy((char*)response.output.elements, "Restarting...");
+//                    response.output.count = strlen("Restarting...");
+//                    // Possibly call NVIC_SystemReset() here
+//                    break;
+//
+//                case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_FACTORY_RESET:
+//                    response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
+//                    strcpy((char*)response.output.elements, "Factory reset...");
+//                    response.output.count = strlen("Factory reset...");
+//                    // Implement your custom factory reset logic
+//                    break;
+//
+//                case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_STORE_PERSISTENT_STATES:
+//                    // This is what Yakut uses when we do "yakut reg ... store".
+//                    response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
+//                    strcpy((char*)response.output.elements, "Storing registers...");
+//                    response.output.count = strlen("Storing registers...");
+//                    // Write the code to save your g_register_values to Flash, EEPROM, etc.
+//                    break;
+//
+//                default:
+//                    response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_BAD_COMMAND;
+//                    strcpy((char*)response.output.elements, "Unknown command");
+//                    response.output.count = strlen("Unknown command");
+//                    break;
+//            }
+
             switch (request.command)
             {
-                case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_RESTART:
-                    response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
-                    strcpy((char*)response.output.elements, "Restarting...");
-                    response.output.count = strlen("Restarting...");
-                    // Possibly call NVIC_SystemReset() here
-                    break;
+//
+            case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_RESTART:
+                response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
+                strcpy((char*)response.output.elements, "Restarting...");
+                response.output.count = strlen("Restarting...");
+                restart_pending = true;  // Delay reset until response is sent
+                break;
+
 
                 case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_FACTORY_RESET:
                     response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
                     strcpy((char*)response.output.elements, "Factory reset...");
                     response.output.count = strlen("Factory reset...");
-                    // Implement your custom factory reset logic
+                    // Optional: zero g_register_values and re-save
+                    for (size_t i = 0; i < g_num_registers; i++) g_register_values[i] = 0;
+                    save_registers_to_flash();
                     break;
 
                 case uavcan_node_ExecuteCommand_Request_1_3_COMMAND_STORE_PERSISTENT_STATES:
-                    // This is what Yakut uses when we do "yakut reg ... store".
+                    save_registers_to_flash();
                     response.status = uavcan_node_ExecuteCommand_Response_1_3_STATUS_SUCCESS;
                     strcpy((char*)response.output.elements, "Storing registers...");
                     response.output.count = strlen("Storing registers...");
-                    // Write the code to save your g_register_values to Flash, EEPROM, etc.
                     break;
 
                 default:
@@ -570,6 +655,9 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
                     response.output.count = strlen("Unknown command");
                     break;
             }
+
+
+
 
             /* Serialize and Send Response */
             uint8_t resp_payload[uavcan_node_ExecuteCommand_Response_1_3_SERIALIZATION_BUFFER_SIZE_BYTES_];

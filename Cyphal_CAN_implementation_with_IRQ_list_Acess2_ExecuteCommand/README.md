@@ -86,6 +86,13 @@ yakut sub uavcan.node.Heartbeat.1.0
 yakut sub uavcan.node.Heartbeat.1.0 --with-metadata
 ```
 
+
+### Publishing Messages for Testing
+
+```bash
+yakut pub 1620:uavcan.primitive.array.Real64.1.0 '{value: [1.1, 2.2, 3.3]}'
+```
+
 ### Working with Registers
 
 List all available registers:
@@ -108,23 +115,27 @@ y r 96 my_register_2nd 100
 
 ### Executing Commands
 
-Restart the node:
-
-```bash
-y cmd 96 restart
-```
-
 Store persistent states:
 
 ```bash
 yakut execute-command 96 store
 ```
 
-### Publishing Messages for Testing
+
+Restart the node:
 
 ```bash
-yakut pub 1620:uavcan.primitive.array.Real64.1.0 '{value: [1.1, 2.2, 3.3]}'
+y cmd 96 restart
 ```
+
+
+Factory reset (all register value=0):
+
+```bash
+y cmd 96 factory_reset
+```
+
+
 
 ***
 

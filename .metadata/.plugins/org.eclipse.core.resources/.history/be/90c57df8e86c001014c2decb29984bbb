@@ -1,0 +1,55 @@
+/*
+ * flash_storage.c
+ *
+ *  Created on: Jul 30, 2025
+ *      Author: ahmed
+ */
+
+
+#include "flash_storage.h"
+#include "stm32f4xx_hal.h"
+#ifndef FLASH_SECTOR_11
+#define FLASH_SECTOR_11  ((uint32_t)11)  // Sector number 11
+#endif
+
+
+#define FLASH_USER_START_ADDR  0x080E0000U      // Start of Sector 11
+#define FLASH_SECTOR           FLASH_SECTOR_11  // Last sector of 512KB Flash
+
+void save_registers_to_flash(uint16_t *values, size_t count)
+{
+    HAL_FLASH_Unlock();
+
+    // Erase the Flash sector before writing
+    FLASH_EraseInitTypeDef erase;
+    erase.TypeErase = FLASH_TYPEERASE_SECTORS;
+    erase.Sector = FLASH_SECTOR;
+    erase.NbSectors = 1;
+    erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+
+    uint32_t error;
+    if (HAL_FLASHEx_Erase(&erase, &error) != HAL_OK)
+    {
+        HAL_FLASH_Lock();
+        return;  // Could log or signal error
+    }
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD,
+                          FLASH_USER_START_ADDR + i * 2,
+                          values[i]);
+    }
+
+    HAL_FLASH_Lock();
+}
+
+void load_registers_from_flash(uint16_t *values, size_t count)
+{
+    const uint16_t *flash_data = (const uint16_t*)FLASH_USER_START_ADDR;
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        values[i] = flash_data[i];
+    }
+}
