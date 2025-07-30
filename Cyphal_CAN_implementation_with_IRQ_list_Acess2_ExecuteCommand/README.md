@@ -135,9 +135,74 @@ Factory reset (all register value=0):
 y cmd 96 factory_reset
 ```
 
+## 🔒 Persistent Register Storage in Flash (STM32F446RE)
 
+This project stores **Cyphal register values** persistently in internal Flash memory so that values survive **power cycles and resets**.
 
-***
+---
+
+### 📌 Flash Address Used
+
+```bash
+#define FLASH_BASE_ADDR       0x08060000U
+#define FLASH_SECTOR_TO_ERASE FLASH_SECTOR_7
+```
+* Address: 0x08060000 corresponds to Sector 7 of Flash memory.
+
+* Sector Size: 128 KB
+
+* MCU: STM32F446RE
+
+## ⚠️ Flash Memory Layout
+
+| Sector | Address        | Size                                  |
+| ------ | -------------- | ------------------------------------- |
+| 0      | 0x08000000     | 16 KB                                 |
+| 1–3    | ...            | 16 KB                                 |
+| 4      | 0x08010000     | 64 KB                                 |
+| 5–6    | 0x08020000+    | 128 KB                                |
+| **7**  | **0x08060000** | **128 KB ← Used for persistent data** |
+
+## ⚠️ Firmware Flash Size Limit
+Make sure your application does not exceed 0x08060000 in Flash.
+
+* ✅ Option 1: Modify the .ld linker script to cap the program size.
+* ✅ Option 2: In STM32CubeIDE, go to
+
+```bash
+Project > Properties > C/C++ Build > Settings > MCU Settings
+```
+and set Flash size limit appropriately.
+
+## ✅ Behavior
+On startup, the firmware reads register values from Flash (0x08060000) into RAM.
+
+* On executing:
+```bash
+yakut execute-command 96 store
+```
+⇒ Register values are written to Flash.
+
+* On executing:
+
+```bash
+y cmd 96 restart
+```
+⇒ MCU performs a software reset.
+
+* Flashing new firmware does not erase stored values
+unless Sector 7 is manually erased.
+
+## 🧯 Factory Reset (Optional)
+To reset the register values to factory defaults:
+
+* 🛠 Manual: Erase Sector 7 using STM32CubeProgrammer.
+
+* 🔁 Software: Implement a factory_reset command handler that:
+
+  * Erases Sector 7
+
+  * Resets the MCU (via NVIC_SystemReset())
 
 ## Help
 
@@ -148,6 +213,8 @@ Contact the [Authors](##authors), but please make sure to make an effort before 
 Contributor names and contact info
 
 Md Tuhin Ahmed | [ahmedmd.tuhin@yahoo.com](ahmedmd.tuhin@yahoo.com)
+
+
 
 ## Version History
 
